@@ -1,0 +1,114 @@
+const FIREBASE_URL = 'https://collage-8c283-default-rtdb.firebaseio.com/'; // Keep your Firebase DB URL
+const FIREBASE_SECRET = "your_actual_firebase_secret_here"; // Replace with your actual Firebase secret
+
+Logger.log("New version running...");
+
+function uploadToFirebase() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const usersSheet = ss.getSheetByName("Users").getDataRange().getValues();
+  const studentsSheet = ss.getSheetByName("Students").getDataRange().getValues();
+  const attendanceSheet = ss.getSheetByName("Attendance").getDataRange().getValues();
+  const marksSheet = ss.getSheetByName("Marks").getDataRange().getValues();
+  const feesSheet = ss.getSheetByName("Fees").getDataRange().getValues();
+  const backlogsSheet = ss.getSheetByName("Backlogs").getDataRange().getValues();
+  const cgpaSheet = ss.getSheetByName("CGPA").getDataRange().getValues();
+
+  const users = {};
+  const students = {};
+
+  // Process Users
+  const userHeaders = usersSheet[0];
+  for (let i = 1; i < usersSheet.length; i++) {
+    const row = usersSheet[i];
+    const uid = row[0];
+    users[uid] = {};
+    for (let j = 1; j < row.length; j++) {
+      users[uid][userHeaders[j]] = row[j];
+    }
+  }
+
+  // Process Students
+  const studentHeaders = studentsSheet[0];
+  for (let i = 1; i < studentsSheet.length; i++) {
+    const row = studentsSheet[i];
+    const studentId = row[0];
+    students[studentId] = {
+      name: row[1],
+      department: row[2],
+      year: row[3],
+      roll_no: row[4],
+      cgpa: row[5],
+      attendance: {},
+      marks: {},
+      fees: {},
+      backlogs: {},
+      cgpa_history: {}
+    };
+  }
+
+  // Attendance
+  for (let i = 1; i < attendanceSheet.length; i++) {
+    const [studentId, subject, attended, total] = attendanceSheet[i];
+    if (students[studentId]) {
+      students[studentId].attendance[subject] = { attended, total };
+    }
+  }
+
+  // Marks
+  for (let i = 1; i < marksSheet.length; i++) {
+    const [studentId, subject, internal, external, average] = marksSheet[i];
+    if (students[studentId]) {
+      students[studentId].marks[subject] = { internal, external, average };
+    }
+  }
+
+  // Fees
+  for (let i = 1; i < feesSheet.length; i++) {
+    const [studentId, tuition_fees, exam_fees, due_amount] = feesSheet[i];
+    if (students[studentId]) {
+      students[studentId].fees = { tuition_fees, exam_fees, due_amount };
+    }
+  }
+
+  // Backlogs
+  for (let i = 1; i < backlogsSheet.length; i++) {
+    const [studentId, subject, status] = backlogsSheet[i];
+    if (students[studentId]) {
+      students[studentId].backlogs[subject] = status;
+    }
+  }
+
+  // CGPA History
+  for (let i = 1; i < cgpaSheet.length; i++) {
+    const [studentId, semester, cgpa] = cgpaSheet[i];
+    if (students[studentId]) {
+      students[studentId].cgpa_history[semester] = cgpa;
+    }
+  }
+
+  // Send to Firebase
+  sendToFirebase("/students.json", students);
+  sendToFirebase("/users.json", users);
+}
+
+function sendToFirebase(path, data) {
+  const url = `${FIREBASE_URL.replace(/\/$/, "")}${path}?auth=${FIREBASE_SECRET}`;
+  const options = {
+    method: "put",
+    contentType: "application/json",
+    payload: JSON.stringify(data),
+    muteHttpExceptions: true,
+  };
+  const response = UrlFetchApp.fetch(url, options);
+  Logger.log(response.getContentText());
+}
+
+// Trigger functions to auto-sync on any sheet change/edit
+function onEdit(e) {
+  uploadToFirebase();
+}
+
+function onChange(e) {
+  uploadToFirebase();
+}
